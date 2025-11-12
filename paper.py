@@ -70,6 +70,9 @@ class ArxivPaper:
             tmpdirname = stack.enter_context(TemporaryDirectory())
             # file = self._paper.download_source(dirpath=tmpdirname)
             try:
+                if getattr(self._paper, "pdf_url", None) is None:
+                    logger.warning(f"No PDF URL for {self.arxiv_id}, skipping source download.")
+                    return None
                 # 尝试下载源文件
                 file = self._paper.download_source(dirpath=tmpdirname)
             except HTTPError as e:
