@@ -27,6 +27,13 @@ llm:
     max_tokens: 16384
     model: ???
   language: English # Preferred language for the TL;DR. Example: English
+  fallback:
+    api:
+      key: null # Optional backup API key. Example: sk-xxx
+      base_url: null # Optional backup API URL. Example: https://api.siliconflow.cn/v1
+    generation_kwargs:
+      model: null # Optional backup model name.
+    language: English # Optional language for backup model TL;DR
 
 reranker:
   local:

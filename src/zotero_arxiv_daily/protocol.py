@@ -70,7 +70,13 @@ class Paper:
             return "request_params"
         return "unknown"
     
-    def generate_tldr(self, openai_client:OpenAI,llm_params:dict) -> str:
+    def generate_tldr(
+        self,
+        openai_client: OpenAI,
+        llm_params: dict,
+        fallback_openai_client: Optional[OpenAI] = None,
+        fallback_llm_params: Optional[dict] = None,
+    ) -> str:
         try:
             tldr = self._generate_tldr_with_llm(openai_client,llm_params)
             self.tldr = tldr
@@ -82,6 +88,20 @@ class Paper:
             logger.error(
                 f"[TLDR][LLM_ERROR][{category}] url={self.url} lang={lang} model={model} error={type(e).__name__}: {e}"
             )
+            if fallback_openai_client is not None and fallback_llm_params is not None:
+                try:
+                    logger.warning(f"[TLDR][FALLBACK_LLM] url={self.url} reason=primary_failed")
+                    tldr = self._generate_tldr_with_llm(fallback_openai_client, fallback_llm_params)
+                    self.tldr = tldr
+                    return tldr
+                except Exception as fallback_error:
+                    fallback_category = self._classify_llm_error(fallback_error)
+                    fallback_lang = fallback_llm_params.get('language', 'English')
+                    fallback_model = fallback_llm_params.get('generation_kwargs', {}).get('model', None)
+                    logger.error(
+                        f"[TLDR][FALLBACK_LLM_ERROR][{fallback_category}] url={self.url} lang={fallback_lang} model={fallback_model} "
+                        f"error={type(fallback_error).__name__}: {fallback_error}"
+                    )
             logger.warning(
                 f"[TLDR][FALLBACK_ABSTRACT] url={self.url} reason=llm_generation_failed"
             )
@@ -135,13 +155,27 @@ class Paper:
 
         return [str(item).strip() for item in parsed if str(item).strip()]
     
-    def generate_affiliations(self, openai_client:OpenAI,llm_params:dict) -> Optional[list[str]]:
+    def generate_affiliations(
+        self,
+        openai_client: OpenAI,
+        llm_params: dict,
+        fallback_openai_client: Optional[OpenAI] = None,
+        fallback_llm_params: Optional[dict] = None,
+    ) -> Optional[list[str]]:
         try:
             affiliations = self._generate_affiliations_with_llm(openai_client,llm_params)
             self.affiliations = affiliations
             return affiliations
         except Exception as e:
             logger.warning(f"Failed to generate affiliations of {self.url}: {e}")
+            if fallback_openai_client is not None and fallback_llm_params is not None:
+                try:
+                    logger.warning(f"[AFFILIATIONS][FALLBACK_LLM] url={self.url} reason=primary_failed")
+                    affiliations = self._generate_affiliations_with_llm(fallback_openai_client, fallback_llm_params)
+                    self.affiliations = affiliations
+                    return affiliations
+                except Exception as fallback_error:
+                    logger.warning(f"[AFFILIATIONS][FALLBACK_LLM_ERROR] url={self.url} error={fallback_error}")
             self.affiliations = None
             return None
 @dataclass

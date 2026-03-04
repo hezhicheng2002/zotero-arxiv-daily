@@ -20,6 +20,18 @@ class Executor:
         }
         self.reranker = get_reranker_cls(config.executor.reranker)(config)
         self.openai_client = OpenAI(api_key=config.llm.api.key, base_url=config.llm.api.base_url)
+        self.fallback_openai_client = None
+        self.fallback_llm_config = None
+
+        fallback_cfg = config.llm.get("fallback", None)
+        if fallback_cfg and fallback_cfg.get("api", None):
+            fallback_key = fallback_cfg.api.get("key", None)
+            fallback_base_url = fallback_cfg.api.get("base_url", None)
+            fallback_model = fallback_cfg.get("generation_kwargs", {}).get("model", None)
+            if fallback_key and fallback_base_url and fallback_model:
+                self.fallback_openai_client = OpenAI(api_key=fallback_key, base_url=fallback_base_url)
+                self.fallback_llm_config = fallback_cfg
+                logger.info("Configured fallback LLM provider")
 
     def _is_retryable_zotero_error(self, error: Exception) -> bool:
         message = str(error).lower()
@@ -112,8 +124,18 @@ class Executor:
             reranked_papers = reranked_papers[:self.config.executor.max_paper_num]
             logger.info("Generating TLDR and affiliations...")
             for p in tqdm(reranked_papers):
-                p.generate_tldr(self.openai_client, self.config.llm)
-                p.generate_affiliations(self.openai_client, self.config.llm)
+                p.generate_tldr(
+                    self.openai_client,
+                    self.config.llm,
+                    fallback_openai_client=self.fallback_openai_client,
+                    fallback_llm_params=self.fallback_llm_config,
+                )
+                p.generate_affiliations(
+                    self.openai_client,
+                    self.config.llm,
+                    fallback_openai_client=self.fallback_openai_client,
+                    fallback_llm_params=self.fallback_llm_config,
+                )
         elif not self.config.executor.send_empty:
             logger.info("No new papers found. No email will be sent.")
             return
