@@ -6,6 +6,7 @@ import tiktoken
 from openai import OpenAI
 from loguru import logger
 import json
+import ast
 RawPaperItem = TypeVar('RawPaperItem')
 
 @dataclass
@@ -96,6 +97,10 @@ class Paper:
             prompt_tokens = enc.encode(prompt)
             prompt_tokens = prompt_tokens[:2000]  # truncate to 2000 tokens
             prompt = enc.decode(prompt_tokens)
+            generation_kwargs = dict(llm_params.get('generation_kwargs', {}))
+            generation_kwargs.setdefault("max_tokens", 256)
+            generation_kwargs.setdefault("temperature", 0)
+
             affiliations = openai_client.chat.completions.create(
                 messages=[
                     {
@@ -104,16 +109,31 @@ class Paper:
                     },
                     {"role": "user", "content": prompt},
                 ],
-                **llm_params.get('generation_kwargs', {})
+                **generation_kwargs
             )
             affiliations = affiliations.choices[0].message.content
 
-            affiliations = re.search(r'\[.*?\]', affiliations, flags=re.DOTALL).group(0)
-            affiliations = json.loads(affiliations)
+            affiliations = self._parse_affiliations_output(affiliations)
             affiliations = list(set(affiliations))
             affiliations = [str(a) for a in affiliations]
 
             return affiliations
+
+    def _parse_affiliations_output(self, output: str) -> list[str]:
+        output = output.strip()
+        matched = re.search(r'\[.*?\]', output, flags=re.DOTALL)
+        if matched:
+            output = matched.group(0)
+
+        try:
+            parsed = json.loads(output)
+        except Exception:
+            parsed = ast.literal_eval(output)
+
+        if not isinstance(parsed, list):
+            raise ValueError(f"Affiliations output is not a list: {type(parsed)}")
+
+        return [str(item).strip() for item in parsed if str(item).strip()]
     
     def generate_affiliations(self, openai_client:OpenAI,llm_params:dict) -> Optional[list[str]]:
         try:
