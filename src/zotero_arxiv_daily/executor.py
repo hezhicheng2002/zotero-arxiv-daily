@@ -5,6 +5,7 @@ from .utils import glob_match
 from .retriever import get_retriever_cls
 from .protocol import CorpusPaper
 import random
+import time
 from datetime import datetime
 from .reranker import get_reranker_cls
 from .construct_email import render_email
@@ -19,12 +20,43 @@ class Executor:
         }
         self.reranker = get_reranker_cls(config.executor.reranker)(config)
         self.openai_client = OpenAI(api_key=config.llm.api.key, base_url=config.llm.api.base_url)
+
+    def _is_retryable_zotero_error(self, error: Exception) -> bool:
+        message = str(error).lower()
+        retryable_markers = [
+            "code: 429",
+            "code: 502",
+            "code: 503",
+            "code: 504",
+            "bad gateway",
+            "timeout",
+            "timed out",
+            "connection",
+            "temporarily unavailable",
+            "service unavailable",
+        ]
+        return any(marker in message for marker in retryable_markers)
+
     def fetch_zotero_corpus(self) -> list[CorpusPaper]:
         logger.info("Fetching zotero corpus")
         zot = zotero.Zotero(self.config.zotero.user_id, 'user', self.config.zotero.api_key)
-        collections = zot.everything(zot.collections())
-        collections = {c['key']:c for c in collections}
-        corpus = zot.everything(zot.items(itemType='conferencePaper || journalArticle || preprint'))
+        max_retries = 3
+        for attempt in range(1, max_retries + 1):
+            try:
+                collections = zot.everything(zot.collections())
+                collections = {c['key']: c for c in collections}
+                corpus = zot.everything(zot.items(itemType='conferencePaper || journalArticle || preprint'))
+                break
+            except Exception as error:
+                if attempt < max_retries and self._is_retryable_zotero_error(error):
+                    backoff_seconds = 2 ** (attempt - 1)
+                    logger.warning(
+                        f"Transient Zotero API error (attempt {attempt}/{max_retries}): {error}. "
+                        f"Retrying in {backoff_seconds}s..."
+                    )
+                    time.sleep(backoff_seconds)
+                    continue
+                raise
         corpus = [c for c in corpus if c['data']['abstractNote'] != '']
         def get_collection_path(col_key:str) -> str:
             if p := collections[col_key]['data']['parentCollection']:
