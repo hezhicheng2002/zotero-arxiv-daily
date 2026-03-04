@@ -1,0 +1,41 @@
+name: Create Upstream Sync PR
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - upstream-main
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: upstream-sync-pr
+  cancel-in-progress: true
+
+jobs:
+  create-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Create or update PR from upstream-main to main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          existing_pr_number="$(gh pr list --base main --head upstream-main --state open --json number --jq '.[0].number')"
+
+          if [ -n "$existing_pr_number" ] && [ "$existing_pr_number" != "null" ]; then
+            echo "PR #$existing_pr_number already exists."
+            gh pr edit "$existing_pr_number" --title "chore: sync upstream-main into main" --body "Automated PR to sync upstream changes into main.\n\n- Source: upstream-main\n- Target: main\n\nReview and merge when ready."
+          else
+            gh pr create \
+              --base main \
+              --head upstream-main \
+              --title "chore: sync upstream-main into main" \
+              --body "Automated PR to sync upstream changes into main.\n\n- Source: upstream-main\n- Target: main\n\nReview and merge when ready."
+          fi
