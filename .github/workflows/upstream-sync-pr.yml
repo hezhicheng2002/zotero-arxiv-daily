@@ -23,15 +23,19 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Skip if upstream-main has no new commits over main
+      - name: Check whether PR is needed
+        id: diff_check
         run: |
           git fetch origin main upstream-main
           if [ "$(git rev-parse origin/main)" = "$(git rev-parse origin/upstream-main)" ]; then
             echo "No differences between upstream-main and main."
-            exit 0
+            echo "need_pr=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "need_pr=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Create or update PR from upstream-main to main
+        if: steps.diff_check.outputs.need_pr == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
