@@ -52,7 +52,16 @@ def get_empty_html():
   """
   return block_template
 
-def get_block_html(title:str, authors:str, rate:str, tldr:str, pdf_url:str, affiliations:str=None, show_tldr: bool = True):
+def get_block_html(
+    title: str,
+    authors: str,
+    rate: str,
+    tldr: str,
+    pdf_url: str,
+    affiliations: str = None,
+    show_tldr: bool = True,
+    show_affiliations: bool = True,
+):
     block_template = """
     <table border="0" cellpadding="0" cellspacing="0" width="100%" style="font-family: Arial, sans-serif; border: 1px solid #ddd; border-radius: 8px; padding: 16px; background-color: #f9f9f9;">
     <tr>
@@ -60,13 +69,7 @@ def get_block_html(title:str, authors:str, rate:str, tldr:str, pdf_url:str, affi
             {title}
         </td>
     </tr>
-    <tr>
-        <td style="font-size: 14px; color: #666; padding: 8px 0;">
-            {authors}
-            <br>
-            <i>{affiliations}</i>
-        </td>
-    </tr>
+    __AUTHOR_ROW__
     <tr>
         <td style="font-size: 14px; color: #333; padding: 8px 0;">
             <strong>Relevance:</strong> {rate}
@@ -81,6 +84,22 @@ def get_block_html(title:str, authors:str, rate:str, tldr:str, pdf_url:str, affi
     </tr>
 </table>
 """
+    author_row = f"""
+    <tr>
+        <td style="font-size: 14px; color: #666; padding: 8px 0;">
+            {authors}
+"""
+    if show_affiliations:
+        author_row += f"""
+            <br>
+            <i>{affiliations}</i>
+"""
+    author_row += """
+        </td>
+    </tr>
+"""
+    block_template = block_template.replace("__AUTHOR_ROW__", author_row)
+
     tldr_row = ""
     if show_tldr:
         tldr_row = f"""
@@ -110,7 +129,7 @@ def get_stars(score:float):
         return '<div class="star-wrapper">'+full_star * full_star_num + half_star * half_star_num + '</div>'
 
 
-def render_email(papers:list[Paper], show_tldr: bool = True) -> str:
+def render_email(papers:list[Paper], show_tldr: bool = True, show_affiliations: bool = True) -> str:
     parts = []
     if len(papers) == 0 :
         return framework.replace('__CONTENT__', get_empty_html())
@@ -131,7 +150,18 @@ def render_email(papers:list[Paper], show_tldr: bool = True) -> str:
                 affiliations += ', ...'
         else:
             affiliations = 'Unknown Affiliation'
-        parts.append(get_block_html(p.title, authors, rate, p.tldr, p.pdf_url, affiliations, show_tldr=show_tldr))
+        parts.append(
+            get_block_html(
+                p.title,
+                authors,
+                rate,
+                p.tldr,
+                p.pdf_url,
+                affiliations,
+                show_tldr=show_tldr,
+                show_affiliations=show_affiliations,
+            )
+        )
 
     content = '<br>' + '</br><br>'.join(parts) + '</br>'
     return framework.replace('__CONTENT__', content)

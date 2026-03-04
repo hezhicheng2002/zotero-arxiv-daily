@@ -103,6 +103,7 @@ class Executor:
     
     def run(self):
         show_tldr = self.config.executor.get("show_tldr", True)
+        show_affiliations = self.config.executor.get("show_affiliations", True)
         corpus = self.fetch_zotero_corpus()
         corpus = self.filter_corpus(corpus)
         if len(corpus) == 0:
@@ -123,10 +124,14 @@ class Executor:
             logger.info("Reranking papers...")
             reranked_papers = self.reranker.rerank(all_papers, corpus)
             reranked_papers = reranked_papers[:self.config.executor.max_paper_num]
-            if show_tldr:
+            if show_tldr and show_affiliations:
                 logger.info("Generating TLDR and affiliations...")
-            else:
+            elif show_tldr and not show_affiliations:
+                logger.info("Generating TLDR (affiliations disabled)...")
+            elif (not show_tldr) and show_affiliations:
                 logger.info("Generating affiliations (TLDR disabled)...")
+            else:
+                logger.info("TLDR and affiliations disabled. Skipping LLM generation.")
             for p in tqdm(reranked_papers):
                 if show_tldr:
                     p.generate_tldr(
@@ -135,16 +140,17 @@ class Executor:
                         fallback_openai_client=self.fallback_openai_client,
                         fallback_llm_params=self.fallback_llm_config,
                     )
-                p.generate_affiliations(
-                    self.openai_client,
-                    self.config.llm,
-                    fallback_openai_client=self.fallback_openai_client,
-                    fallback_llm_params=self.fallback_llm_config,
-                )
+                if show_affiliations:
+                    p.generate_affiliations(
+                        self.openai_client,
+                        self.config.llm,
+                        fallback_openai_client=self.fallback_openai_client,
+                        fallback_llm_params=self.fallback_llm_config,
+                    )
         elif not self.config.executor.send_empty:
             logger.info("No new papers found. No email will be sent.")
             return
         logger.info("Sending email...")
-        email_content = render_email(reranked_papers, show_tldr=show_tldr)
+        email_content = render_email(reranked_papers, show_tldr=show_tldr, show_affiliations=show_affiliations)
         send_email(self.config, email_content)
         logger.info("Email sent successfully")
