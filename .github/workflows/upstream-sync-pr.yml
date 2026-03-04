@@ -27,8 +27,9 @@ jobs:
         id: diff_check
         run: |
           git fetch origin main upstream-main
-          if [ "$(git rev-parse origin/main)" = "$(git rev-parse origin/upstream-main)" ]; then
-            echo "No differences between upstream-main and main."
+          upstream_ahead_count="$(git rev-list --count origin/main..origin/upstream-main)"
+          if [ "$upstream_ahead_count" -eq 0 ]; then
+            echo "No upstream commits to merge into main."
             echo "need_pr=false" >> "$GITHUB_OUTPUT"
           else
             echo "need_pr=true" >> "$GITHUB_OUTPUT"
