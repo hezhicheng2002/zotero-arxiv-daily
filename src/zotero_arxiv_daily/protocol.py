@@ -52,6 +52,22 @@ class Paper:
         )
         tldr = response.choices[0].message.content
         return tldr
+
+    def _classify_llm_error(self, error: Exception) -> str:
+        message = str(error).lower()
+        if any(keyword in message for keyword in ["401", "unauthorized", "authentication", "api key", "invalid_api_key"]):
+            return "auth"
+        if any(keyword in message for keyword in ["403", "forbidden", "permission", "insufficient_quota"]):
+            return "permission_or_quota"
+        if any(keyword in message for keyword in ["404", "model", "does not exist", "not found"]):
+            return "model_or_endpoint"
+        if any(keyword in message for keyword in ["429", "rate limit", "too many requests"]):
+            return "rate_limit"
+        if any(keyword in message for keyword in ["timeout", "timed out", "connection", "dns", "ssl", "network"]):
+            return "network_or_timeout"
+        if any(keyword in message for keyword in ["400", "invalid", "bad request", "max_tokens", "context length"]):
+            return "request_params"
+        return "unknown"
     
     def generate_tldr(self, openai_client:OpenAI,llm_params:dict) -> str:
         try:
@@ -59,7 +75,15 @@ class Paper:
             self.tldr = tldr
             return tldr
         except Exception as e:
-            logger.warning(f"Failed to generate tldr of {self.url}: {e}")
+            category = self._classify_llm_error(e)
+            lang = llm_params.get('language', 'English')
+            model = llm_params.get('generation_kwargs', {}).get('model', None)
+            logger.error(
+                f"[TLDR][LLM_ERROR][{category}] url={self.url} lang={lang} model={model} error={type(e).__name__}: {e}"
+            )
+            logger.warning(
+                f"[TLDR][FALLBACK_ABSTRACT] url={self.url} reason=llm_generation_failed"
+            )
             tldr = self.abstract
             self.tldr = tldr
             return tldr
