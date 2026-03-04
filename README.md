@@ -91,6 +91,7 @@ llm:
     base_url: ${oc.env:OPENAI_API_BASE}
   generation_kwargs:
     model: gpt-4o-mini
+  language: Chinese
 
 source:
   arxiv:

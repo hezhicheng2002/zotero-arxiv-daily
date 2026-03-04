@@ -23,6 +23,14 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Skip if upstream-main has no new commits over main
+        run: |
+          git fetch origin main upstream-main
+          if [ "$(git rev-parse origin/main)" = "$(git rev-parse origin/upstream-main)" ]; then
+            echo "No differences between upstream-main and main."
+            exit 0
+          fi
+
       - name: Create or update PR from upstream-main to main
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
