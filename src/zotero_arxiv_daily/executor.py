@@ -102,6 +102,7 @@ class Executor:
 
     
     def run(self):
+        show_tldr = self.config.executor.get("show_tldr", True)
         corpus = self.fetch_zotero_corpus()
         corpus = self.filter_corpus(corpus)
         if len(corpus) == 0:
@@ -122,14 +123,18 @@ class Executor:
             logger.info("Reranking papers...")
             reranked_papers = self.reranker.rerank(all_papers, corpus)
             reranked_papers = reranked_papers[:self.config.executor.max_paper_num]
-            logger.info("Generating TLDR and affiliations...")
+            if show_tldr:
+                logger.info("Generating TLDR and affiliations...")
+            else:
+                logger.info("Generating affiliations (TLDR disabled)...")
             for p in tqdm(reranked_papers):
-                p.generate_tldr(
-                    self.openai_client,
-                    self.config.llm,
-                    fallback_openai_client=self.fallback_openai_client,
-                    fallback_llm_params=self.fallback_llm_config,
-                )
+                if show_tldr:
+                    p.generate_tldr(
+                        self.openai_client,
+                        self.config.llm,
+                        fallback_openai_client=self.fallback_openai_client,
+                        fallback_llm_params=self.fallback_llm_config,
+                    )
                 p.generate_affiliations(
                     self.openai_client,
                     self.config.llm,
@@ -140,6 +145,6 @@ class Executor:
             logger.info("No new papers found. No email will be sent.")
             return
         logger.info("Sending email...")
-        email_content = render_email(reranked_papers)
+        email_content = render_email(reranked_papers, show_tldr=show_tldr)
         send_email(self.config, email_content)
         logger.info("Email sent successfully")
