@@ -50,8 +50,8 @@ reranker:
 executor:
   debug: false # Whether to use debug mode. Example: true
   send_empty: false # Whether to send an empty email even if no new papers today. Example: true
-  show_tldr: true # Whether to display and generate TLDR in email. Set false to disable TLDR and save LLM tokens.
-  show_affiliations: true # Whether to display and generate affiliations in email. Set false to disable affiliations and save LLM tokens.
+  show_tldr: false # Whether to display and generate TLDR in email. Default false to keep scheduled runs cheap and stable.
+  show_affiliations: false # Whether to display and generate affiliations in email. Default false to keep scheduled runs cheap and stable.
   max_workers: 10 # Concurrent workers for processing papers. Example: 10
   max_paper_num: 100 # The maximum number of the papers presented in the email. Example: 100
   source: ??? # The sources of papers to retrieve. Example: ['arxiv','biorxiv','medrxiv']

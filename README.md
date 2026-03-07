@@ -99,10 +99,15 @@ source:
 
 executor:
   debug: ${oc.env:DEBUG,null}
+  show_tldr: false
+  show_affiliations: false
   source: ['arxiv']
 ```
 >[!NOTE]
 > `${oc.env:XXX,yyy}` means the value of the environment variable `XXX`. If the variable is not set, the default value `yyy` will be used.
+
+>[!NOTE]
+> `show_tldr` and `show_affiliations` are disabled by default to reduce overnight token cost. Set them explicitly to `true` in `CUSTOM_CONFIG` if you want them enabled.
 
 Here is the full configuration, `???` means the value must be filled in:
 ```yaml
@@ -151,6 +156,8 @@ reranker:
 executor:
   debug: false # Whether to use debug mode. Example: true
   send_empty: false # Whether to send an empty email even if no new papers today. Example: true
+  show_tldr: false # Whether to display and generate TLDR in email. Default false for cheaper scheduled runs.
+  show_affiliations: false # Whether to display and generate affiliations in email. Default false for cheaper scheduled runs.
   max_workers: 10 # Concurrent workers for processing papers. Example: 10
   max_paper_num: 100 # The maximum number of the papers presented in the email. Example: 100
   source: ??? # The sources of papers to retrieve. Example: ['arxiv','biorxiv','medrxiv']
