@@ -9,16 +9,13 @@ from urllib.request import urlretrieve
 from tqdm import tqdm
 import os
 from loguru import logger
+
 @register_retriever("arxiv")
 class ArxivRetriever(BaseRetriever):
     def __init__(self, config):
         super().__init__(config)
         if self.config.source.arxiv.category is None:
             raise ValueError("category must be specified for arxiv.")
-
-    @property
-    def _need_full_text(self) -> bool:
-        return self.config.executor.get("show_tldr", True) or self.config.executor.get("show_affiliations", True)
 
     def _retrieve_raw_papers(self) -> list[ArxivResult]:
         client = arxiv.Client(num_retries=10,delay_seconds=10)
@@ -43,14 +40,14 @@ class ArxivRetriever(BaseRetriever):
 
         return raw_papers
 
-    def convert_to_paper(self, raw_paper:ArxivResult) -> Paper:
+    def convert_to_paper(self, raw_paper, *, need_full_text=False) -> Paper:
         title = raw_paper.title
         authors = [a.name for a in raw_paper.authors]
         abstract = raw_paper.summary
         pdf_url = raw_paper.pdf_url
 
         full_text = None
-        if self._need_full_text:
+        if need_full_text:
             with TemporaryDirectory() as temp_dir:
                 path = os.path.join(temp_dir, "paper.pdf")
                 urlretrieve(pdf_url, path)
@@ -68,3 +65,15 @@ class ArxivRetriever(BaseRetriever):
             pdf_url=pdf_url,
             full_text=full_text
         )
+
+    def retrieve_papers(self) -> list[Paper]:
+        raw_papers = self._retrieve_raw_papers()
+        papers = []
+        logger.info("Processing papers...")
+        need_full_text = self.config.executor.get("show_tldr", True) or self.config.executor.get("show_affiliations", True)
+        if not need_full_text:
+            logger.info("TLDR and affiliations are both disabled — skipping PDF download and full text extraction.")
+        with ProcessPoolExecutor(max_workers=self.config.executor.max_workers) as exec_pool:
+            from functools import partial
+            papers = list(exec_pool.map(partial(self.convert_to_paper, need_full_text=need_full_text), raw_papers))
+        return [p for p in papers if p is not None]
