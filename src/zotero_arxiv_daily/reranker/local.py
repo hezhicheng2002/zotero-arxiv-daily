@@ -2,6 +2,7 @@ from .base import BaseReranker, register_reranker
 import logging
 import warnings
 import numpy as np
+from loguru import logger
 @register_reranker("local")
 class LocalReranker(BaseReranker):
     def get_similarity_score(self, s1: list[str], s2: list[str]) -> np.ndarray:
@@ -19,12 +20,16 @@ class LocalReranker(BaseReranker):
             logging.getLogger("huggingface_hub.utils._http").setLevel(logging.ERROR)
             warnings.filterwarnings("ignore", category=FutureWarning)
 
+        logger.info(f"Loading local reranker model: {self.config.reranker.local.model}")
         encoder = SentenceTransformer(self.config.reranker.local.model, trust_remote_code=True)
         if self.config.reranker.local.encode_kwargs:
             encode_kwargs = self.config.reranker.local.encode_kwargs
         else:
             encode_kwargs = {}
+        logger.info(f"Encoding {len(s1)} candidate abstracts...")
         s1_feature = encoder.encode(s1,**encode_kwargs)
+        logger.info(f"Encoding {len(s2)} Zotero abstracts...")
         s2_feature = encoder.encode(s2,**encode_kwargs)
+        logger.info("Computing similarity matrix...")
         sim = encoder.similarity(s1_feature, s2_feature)
         return sim.numpy()

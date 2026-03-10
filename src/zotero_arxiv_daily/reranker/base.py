@@ -3,12 +3,17 @@ from omegaconf import DictConfig
 from ..protocol import Paper, CorpusPaper
 import numpy as np
 from typing import Type
+from loguru import logger
 class BaseReranker(ABC):
     def __init__(self, config:DictConfig):
         self.config = config
 
     def rerank(self, candidates:list[Paper], corpus:list[CorpusPaper]) -> list[Paper]:
         corpus = sorted(corpus,key=lambda x: x.added_date,reverse=True)
+        corpus_limit = self.config.executor.get("max_corpus_num", 512)
+        if corpus_limit is not None and len(corpus) > corpus_limit:
+            logger.info(f"Limiting Zotero corpus to the most recent {corpus_limit} papers for reranking.")
+            corpus = corpus[:corpus_limit]
         time_decay_weight = 1 / (1 + np.log10(np.arange(len(corpus)) + 1))
         time_decay_weight: np.ndarray = time_decay_weight / time_decay_weight.sum()
         sim = self.get_similarity_score([c.abstract for c in candidates], [c.abstract for c in corpus])
