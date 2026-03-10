@@ -32,5 +32,14 @@ def test_render_email_uses_abstract_when_tldr_is_disabled(papers:list[Paper]):
     assert "Test Abstract" in email_content
     assert "Test TLDR" not in email_content
 
+
+def test_render_email_escapes_abstract_with_braces(papers:list[Paper]):
+    papers[0].abstract = "Uses {medical perception bottleneck} & <xml> markers."
+    email_content = render_email(papers, show_tldr=False)
+    assert email_content is not None
+    assert "medical perception bottleneck" in email_content
+    assert "{medical perception bottleneck}" in email_content
+    assert "&lt;xml&gt;" in email_content
+
 def test_send_email(config,papers:list[Paper]):
     send_email(config, render_email(papers))

@@ -1,4 +1,5 @@
 from .protocol import Paper
+import html
 import math
 
 
@@ -52,6 +53,12 @@ def get_empty_html():
   """
   return block_template
 
+
+def _escape_text(value: str | None) -> str:
+    if value is None:
+        return ""
+    return html.escape(str(value), quote=True)
+
 def get_block_html(
     title: str,
     authors: str,
@@ -63,58 +70,55 @@ def get_block_html(
     show_tldr: bool = True,
     show_affiliations: bool = True,
 ):
-    block_template = """
-    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="font-family: Arial, sans-serif; border: 1px solid #ddd; border-radius: 8px; padding: 16px; background-color: #f9f9f9;">
-    <tr>
-        <td style="font-size: 20px; font-weight: bold; color: #333;">
-            {title}
-        </td>
-    </tr>
-    __AUTHOR_ROW__
-    <tr>
-        <td style="font-size: 14px; color: #333; padding: 8px 0;">
-            <strong>Relevance:</strong> {rate}
-        </td>
-    </tr>
-    __TLDR_ROW__
-
-    <tr>
-        <td style="padding: 8px 0;">
-            <a href="{pdf_url}" style="display: inline-block; text-decoration: none; font-size: 14px; font-weight: bold; color: #fff; background-color: #d9534f; padding: 8px 16px; border-radius: 4px;">PDF</a>
-        </td>
-    </tr>
-</table>
-"""
     author_row = f"""
     <tr>
         <td style="font-size: 14px; color: #666; padding: 8px 0;">
-            {authors}
+            {_escape_text(authors)}
 """
     if show_affiliations:
         author_row += f"""
             <br>
-            <i>{affiliations}</i>
+            <i>{_escape_text(affiliations)}</i>
 """
     author_row += """
         </td>
     </tr>
 """
-    block_template = block_template.replace("__AUTHOR_ROW__", author_row)
 
     summary_text = tldr if show_tldr and tldr else abstract
-    summary_label = "TLDR" if show_tldr else "Abstract"
+    summary_label = "TLDR" if show_tldr and tldr else "Abstract"
 
     tldr_row = ""
     if summary_text:
         tldr_row = f"""
     <tr>
-        <td style=\"font-size: 14px; color: #333; padding: 8px 0;\">
-            <strong>{summary_label}:</strong> {summary_text}
+        <td style="font-size: 14px; color: #333; padding: 8px 0;">
+            <strong>{summary_label}:</strong> {_escape_text(summary_text)}
         </td>
     </tr>
 """
-    block_template = block_template.replace("__TLDR_ROW__", tldr_row)
-    return block_template.format(title=title, authors=authors,rate=rate, tldr=tldr, pdf_url=pdf_url, affiliations=affiliations)
+
+    return f"""
+    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="font-family: Arial, sans-serif; border: 1px solid #ddd; border-radius: 8px; padding: 16px; background-color: #f9f9f9;">
+    <tr>
+        <td style="font-size: 20px; font-weight: bold; color: #333;">
+            {_escape_text(title)}
+        </td>
+    </tr>
+    {author_row}
+    <tr>
+        <td style="font-size: 14px; color: #333; padding: 8px 0;">
+            <strong>Relevance:</strong> {rate}
+        </td>
+    </tr>
+    {tldr_row}
+    <tr>
+        <td style="padding: 8px 0;">
+            <a href="{_escape_text(pdf_url)}" style="display: inline-block; text-decoration: none; font-size: 14px; font-weight: bold; color: #fff; background-color: #d9534f; padding: 8px 16px; border-radius: 4px;">PDF</a>
+        </td>
+    </tr>
+</table>
+"""
 
 def get_stars(score:float):
     full_star = '<span class="full-star">⭐</span>'
