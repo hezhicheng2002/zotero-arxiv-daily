@@ -57,6 +57,7 @@ def get_block_html(
     authors: str,
     rate: str,
     tldr: str,
+    abstract: str,
     pdf_url: str,
     affiliations: str = None,
     show_tldr: bool = True,
@@ -100,12 +101,15 @@ def get_block_html(
 """
     block_template = block_template.replace("__AUTHOR_ROW__", author_row)
 
+    summary_text = tldr if show_tldr and tldr else abstract
+    summary_label = "TLDR" if show_tldr else "Abstract"
+
     tldr_row = ""
-    if show_tldr:
+    if summary_text:
         tldr_row = f"""
     <tr>
         <td style=\"font-size: 14px; color: #333; padding: 8px 0;\">
-            <strong>TLDR:</strong> {tldr}
+            <strong>{summary_label}:</strong> {summary_text}
         </td>
     </tr>
 """
@@ -156,6 +160,7 @@ def render_email(papers:list[Paper], show_tldr: bool = True, show_affiliations: 
                 authors,
                 rate,
                 p.tldr,
+                p.abstract,
                 p.pdf_url,
                 affiliations,
                 show_tldr=show_tldr,
