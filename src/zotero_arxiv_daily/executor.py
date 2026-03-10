@@ -19,11 +19,21 @@ class Executor:
             source: get_retriever_cls(source)(config) for source in config.executor.source
         }
         self.reranker = get_reranker_cls(config.executor.reranker)(config)
-        self.openai_client = OpenAI(api_key=config.llm.api.key, base_url=config.llm.api.base_url)
+        self.openai_client = None
         self.fallback_openai_client = None
         self.fallback_llm_config = None
+        self._llm_clients_initialized = False
 
-        fallback_cfg = config.llm.get("fallback", None)
+    def _ensure_llm_clients(self) -> None:
+        if self._llm_clients_initialized:
+            return
+
+        self.openai_client = OpenAI(
+            api_key=self.config.llm.api.key,
+            base_url=self.config.llm.api.base_url,
+        )
+
+        fallback_cfg = self.config.llm.get("fallback", None)
         if fallback_cfg and fallback_cfg.get("api", None):
             fallback_key = fallback_cfg.api.get("key", None)
             fallback_base_url = fallback_cfg.api.get("base_url", None)
@@ -32,6 +42,8 @@ class Executor:
                 self.fallback_openai_client = OpenAI(api_key=fallback_key, base_url=fallback_base_url)
                 self.fallback_llm_config = fallback_cfg
                 logger.info("Configured fallback LLM provider")
+
+        self._llm_clients_initialized = True
 
     def _is_retryable_zotero_error(self, error: Exception) -> bool:
         message = str(error).lower()
@@ -124,6 +136,13 @@ class Executor:
             logger.info("Reranking papers...")
             reranked_papers = self.reranker.rerank(all_papers, corpus)
             reranked_papers = reranked_papers[:self.config.executor.max_paper_num]
+            if show_tldr or show_affiliations:
+                logger.info(f"Preparing full text for {len(reranked_papers)} top-ranked papers...")
+                papers_by_source = {}
+                for paper in reranked_papers:
+                    papers_by_source.setdefault(paper.source, []).append(paper)
+                for source, papers in papers_by_source.items():
+                    self.retrievers[source].enrich_papers(papers)
             if show_tldr and show_affiliations:
                 logger.info("Generating TLDR and affiliations...")
             elif show_tldr and not show_affiliations:
@@ -132,6 +151,8 @@ class Executor:
                 logger.info("Generating affiliations (TLDR disabled)...")
             else:
                 logger.info("TLDR and affiliations disabled. Skipping LLM generation.")
+            if show_tldr or show_affiliations:
+                self._ensure_llm_clients()
             for p in tqdm(reranked_papers):
                 if show_tldr:
                     p.generate_tldr(

@@ -4,6 +4,7 @@ from ..protocol import Paper, RawPaperItem
 from concurrent.futures import ProcessPoolExecutor
 from typing import Type
 from loguru import logger
+
 class BaseRetriever(ABC):
     name: str
     def __init__(self, config:DictConfig):
@@ -25,6 +26,9 @@ class BaseRetriever(ABC):
         with ProcessPoolExecutor(max_workers=self.config.executor.max_workers) as exec_pool:
             papers = list(exec_pool.map(self.convert_to_paper, raw_papers))
         return [p for p in papers if p is not None]
+
+    def enrich_papers(self, papers:list[Paper]) -> list[Paper]:
+        return papers
 
 registered_retrievers = {}
 
