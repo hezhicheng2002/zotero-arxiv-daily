@@ -1,4 +1,4 @@
-from .base import BaseRetriever, register_retriever
+﻿from .base import BaseRetriever, register_retriever
 import arxiv
 from arxiv import Result as ArxivResult
 from ..protocol import Paper
@@ -15,6 +15,11 @@ class ArxivRetriever(BaseRetriever):
         super().__init__(config)
         if self.config.source.arxiv.category is None:
             raise ValueError("category must be specified for arxiv.")
+
+    @property
+    def _need_full_text(self) -> bool:
+        return self.config.executor.get("show_tldr", True) or self.config.executor.get("show_affiliations", True)
+
     def _retrieve_raw_papers(self) -> list[ArxivResult]:
         client = arxiv.Client(num_retries=10,delay_seconds=10)
         query = '+'.join(self.config.source.arxiv.category)
@@ -43,14 +48,17 @@ class ArxivRetriever(BaseRetriever):
         authors = [a.name for a in raw_paper.authors]
         abstract = raw_paper.summary
         pdf_url = raw_paper.pdf_url
-        with TemporaryDirectory() as temp_dir:
-            path = os.path.join(temp_dir, "paper.pdf")
-            urlretrieve(pdf_url, path)
-            try:
-                full_text = extract_markdown_from_pdf(path)
-            except Exception as e:
-                logger.warning(f"Failed to extract full text of {title}: {e}")
-                full_text = None
+
+        full_text = None
+        if self._need_full_text:
+            with TemporaryDirectory() as temp_dir:
+                path = os.path.join(temp_dir, "paper.pdf")
+                urlretrieve(pdf_url, path)
+                try:
+                    full_text = extract_markdown_from_pdf(path)
+                except Exception as e:
+                    logger.warning(f"Failed to extract full text of {title}: {e}")
+
         return Paper(
             source=self.name,
             title=title,
