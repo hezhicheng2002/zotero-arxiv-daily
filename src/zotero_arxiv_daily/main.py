@@ -1,6 +1,7 @@
 import os
 import sys
 import logging
+import socket
 from omegaconf import DictConfig
 import hydra
 from loguru import logger
@@ -27,6 +28,11 @@ def main(config:DictConfig):
 
     if config.executor.debug:
         logger.info("Debug mode is enabled")
+
+    network_timeout_seconds = config.executor.get("network_timeout_seconds", 60)
+    if network_timeout_seconds:
+        socket.setdefaulttimeout(network_timeout_seconds)
+        logger.info(f"Default network timeout is set to {network_timeout_seconds}s")
     
     executor = Executor(config)
     executor.run()

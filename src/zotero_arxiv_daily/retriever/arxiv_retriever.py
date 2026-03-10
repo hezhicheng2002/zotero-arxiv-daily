@@ -1,12 +1,12 @@
 from concurrent.futures import ProcessPoolExecutor
 import os
 from tempfile import TemporaryDirectory
-from urllib.request import urlretrieve
 
 import arxiv
 from arxiv import Result as ArxivResult
 import feedparser
 from loguru import logger
+import requests
 from tqdm import tqdm
 
 from .base import BaseRetriever, register_retriever
@@ -14,14 +14,17 @@ from ..protocol import Paper
 from ..utils import extract_markdown_from_pdf
 
 
-def _download_and_extract_full_text(title:str, pdf_url:str | None) -> str | None:
+def _download_and_extract_full_text(title:str, pdf_url:str | None, timeout_seconds:int = 60) -> str | None:
     if not pdf_url:
         return None
 
     with TemporaryDirectory() as temp_dir:
         path = os.path.join(temp_dir, "paper.pdf")
         try:
-            urlretrieve(pdf_url, path)
+            response = requests.get(pdf_url, timeout=timeout_seconds)
+            response.raise_for_status()
+            with open(path, "wb") as file:
+                file.write(response.content)
             return extract_markdown_from_pdf(path)
         except Exception as error:
             logger.warning(f"Failed to extract full text of {title}: {error}")
@@ -39,7 +42,11 @@ class ArxivRetriever(BaseRetriever):
         client = arxiv.Client(num_retries=10, delay_seconds=10)
         query = "+".join(self.config.source.arxiv.category)
         # Get the latest paper from arxiv rss feed.
-        feed = feedparser.parse(f"https://rss.arxiv.org/atom/{query}")
+        rss_url = f"https://rss.arxiv.org/atom/{query}"
+        rss_timeout = self.config.executor.get("network_timeout_seconds", 60)
+        response = requests.get(rss_url, timeout=rss_timeout)
+        response.raise_for_status()
+        feed = feedparser.parse(response.content)
         if "Feed error for query" in feed.feed.title:
             raise Exception(f"Invalid ARXIV_QUERY: {query}.")
         raw_papers = []
@@ -93,7 +100,11 @@ class ArxivRetriever(BaseRetriever):
         max_workers = min(self.config.executor.max_workers, len(papers))
         if max_workers <= 1:
             full_texts = [
-                _download_and_extract_full_text(paper.title, paper.pdf_url)
+                _download_and_extract_full_text(
+                    paper.title,
+                    paper.pdf_url,
+                    self.config.executor.get("network_timeout_seconds", 60),
+                )
                 for paper in tqdm(papers)
             ]
         else:
@@ -104,6 +115,7 @@ class ArxivRetriever(BaseRetriever):
                             _download_and_extract_full_text,
                             [paper.title for paper in papers],
                             [paper.pdf_url for paper in papers],
+                            [self.config.executor.get("network_timeout_seconds", 60)] * len(papers),
                         ),
                         total=len(papers),
                     )

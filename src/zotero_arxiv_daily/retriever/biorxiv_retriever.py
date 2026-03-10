@@ -18,9 +18,10 @@ class BiorxivRetriever(BaseRetriever):
         api_url = f"https://api.biorxiv.org/details/{self.server}/2d"
         retry_num = 10
         delay_time = 10
+        request_timeout = self.config.executor.get("network_timeout_seconds", 60)
         for i in range(retry_num):
             try:
-                response = requests.get(api_url)
+                response = requests.get(api_url, timeout=request_timeout)
                 response.raise_for_status()
                 break
             except Exception as e:

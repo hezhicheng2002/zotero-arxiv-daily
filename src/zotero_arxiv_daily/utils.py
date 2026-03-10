@@ -94,6 +94,7 @@ def send_email(config:DictConfig, html:str):
     password = config.email.sender_password
     smtp_server = config.email.smtp_server
     smtp_port = config.email.smtp_port
+    smtp_timeout = config.email.get("timeout_seconds", config.executor.get("network_timeout_seconds", 60))
     def _format_addr(s):
         name, addr = parseaddr(s)
         return formataddr((Header(name, 'utf-8').encode(), addr))
@@ -104,16 +105,21 @@ def send_email(config:DictConfig, html:str):
     today = datetime.datetime.now().strftime('%Y/%m/%d')
     msg['Subject'] = Header(f'Daily arXiv {today}', 'utf-8').encode()
 
+    logger.info(f"Connecting to SMTP server {smtp_server}:{smtp_port} with timeout {smtp_timeout}s")
+
     try:
-        server = smtplib.SMTP(smtp_server, smtp_port)
-        server.starttls()
+        if smtp_port == 465:
+            server = smtplib.SMTP_SSL(smtp_server, smtp_port, timeout=smtp_timeout)
+        else:
+            server = smtplib.SMTP(smtp_server, smtp_port, timeout=smtp_timeout)
+            server.starttls()
     except Exception as e:
-        logger.debug(f"Failed to use TLS. {e}\nTry to use SSL.")
+        logger.debug(f"Primary SMTP connection mode failed. {e}")
         try:
-            server = smtplib.SMTP_SSL(smtp_server, smtp_port)
+            server = smtplib.SMTP_SSL(smtp_server, smtp_port, timeout=smtp_timeout)
         except Exception as e:
             logger.debug(f"Failed to use SSL. {e}\nTry to use plain text.")
-            server = smtplib.SMTP(smtp_server, smtp_port)
+            server = smtplib.SMTP(smtp_server, smtp_port, timeout=smtp_timeout)
 
     server.login(sender, password)
     server.sendmail(sender, [receiver], msg.as_string())
