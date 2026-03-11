@@ -14,7 +14,7 @@ from ..protocol import Paper
 from ..utils import extract_markdown_from_pdf
 
 
-def _download_and_extract_full_text(title:str, pdf_url:str | None, timeout_seconds:int = 60) -> str | None:
+def _download_and_extract_full_text(title: str, pdf_url: str | None, timeout_seconds: int = 60) -> str | None:
     if not pdf_url:
         return None
 

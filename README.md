@@ -158,7 +158,7 @@ executor:
   send_empty: false # Whether to send an empty email even if no new papers today. Example: true
   show_tldr: false # Whether to display and generate TLDR in email. Default false for cheaper scheduled runs.
   show_affiliations: false # Whether to display and generate affiliations in email. Default false for cheaper scheduled runs.
-  max_workers: 10 # Concurrent workers for processing papers. Example: 10
+  max_workers: 4 # Concurrent workers for processing papers. Example: 4
   max_paper_num: 100 # The maximum number of the papers presented in the email. Example: 100
   source: ??? # The sources of papers to retrieve. Example: ['arxiv','biorxiv','medrxiv']
   reranker: local # The reranker to use. Example: 'local' or 'api'

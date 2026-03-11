@@ -27,9 +27,9 @@ class LocalReranker(BaseReranker):
         else:
             encode_kwargs = {}
         logger.info(f"Encoding {len(s1)} candidate abstracts...")
-        s1_feature = encoder.encode(s1,**encode_kwargs)
+        s1_feature = encoder.encode(s1, **encode_kwargs, show_progress_bar=True)
         logger.info(f"Encoding {len(s2)} Zotero abstracts...")
-        s2_feature = encoder.encode(s2,**encode_kwargs)
+        s2_feature = encoder.encode(s2, **encode_kwargs, show_progress_bar=True)
         logger.info("Computing similarity matrix...")
         sim = encoder.similarity(s1_feature, s2_feature)
         return sim.numpy()

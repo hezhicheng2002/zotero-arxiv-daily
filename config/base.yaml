@@ -53,7 +53,7 @@ executor:
   show_tldr: false # Whether to display and generate TLDR in email. Default false to keep scheduled runs cheap and stable.
   show_affiliations: false # Whether to display and generate affiliations in email. Default false to keep scheduled runs cheap and stable.
   network_timeout_seconds: 60 # Default socket/request timeout for network calls such as RSS, PDF download, and SMTP.
-  max_workers: 10 # Concurrent workers for processing papers. Example: 10
+  max_workers: 4 # Concurrent workers for processing papers. Example: 4
   max_corpus_num: 512 # Limit reranking to the most recent Zotero abstracts. Set to null to use the full corpus.
   max_paper_num: 100 # The maximum number of the papers presented in the email. Example: 100
   source: ??? # The sources of papers to retrieve. Example: ['arxiv','biorxiv','medrxiv']
