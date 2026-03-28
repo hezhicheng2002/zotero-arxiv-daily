@@ -23,7 +23,7 @@
 </p>
 
 > [!IMPORTANT]
-> Please keep an eye on this repo, and merge your forked repo in time when there is any update of this upstream, in order to enjoy new features and fix found bugs.
+> This fork is maintained for personal use. Automatic upstream-sync workflows have been removed on purpose. Upstream changes are merged manually so local customizations can be preserved.
 
 ## 🧐 About <a name = "about"></a>
 
@@ -45,12 +45,23 @@
   - biorxiv
   - medrxiv
 
+## This Fork
+- This fork is tuned for personal daily use.
+- Only two workflows are kept: `Send emails daily` and `Test`.
+- `CI`, `Keep Alive`, `Sync Upstream Branch`, and `Create Upstream Sync PR` have been removed.
+- Upstream updates from `TideDra/zotero-arxiv-daily` are synced manually by merge, not by workflow automation.
+- Current defaults prioritize stable scheduled runs:
+  - `show_tldr: false`
+  - `show_affiliations: false`
+  - when TLDR is disabled, the email shows the paper abstract instead
+  - arXiv full-text extraction runs only for top-ranked papers that actually need it
+
 ## 📷 Screenshot
 ![screenshot](./assets/screenshot.png)
 
 ## 🚀 Usage
 ### Quick Start
-1. Fork (and star😘) this repo.
+1. Fork (and star😘) this repo, or use this fork directly as your personal deployment repo.
 ![fork](./assets/fork.png)
 
 2. Set Github Action environment variables.
@@ -178,6 +189,9 @@ Then check the log and the receiver email after it finishes.
 
 By default, the main workflow runs on 22:00 UTC everyday. You can change this time by editting the workflow config `.github/workflows/main.yml`.
 
+> [!NOTE]
+> In this fork, `Send emails daily` is the only scheduled workflow. There is no automatic upstream sync anymore.
+
 ### Local Running
 Supported by [uv](https://github.com/astral-sh/uv), this workflow can easily run on your local device if uv is installed:
 ```bash
@@ -188,8 +202,39 @@ cd zotero-arxiv-daily
 uv run main.py
 ```
 
-## 🚀 Sync with the latest version
-This project is in active development. You can subscribe this repo via `Watch` so that you can be notified once we publish new release.
+## 🚀 Manual Upstream Sync
+This fork tracks upstream manually. The goal is to get upstream fixes and features without accidentally overwriting local customizations.
+
+Recommended workflow:
+1. Make sure your local worktree is clean, or commit/stash your current edits first.
+2. Fetch upstream `main` into a temporary remote-tracking ref:
+```bash
+git fetch https://github.com/TideDra/zotero-arxiv-daily.git main:refs/remotes/upstream-temp/main
+```
+3. Review the divergence if needed:
+```bash
+git rev-list --left-right --count main...refs/remotes/upstream-temp/main
+git log --oneline --left-right --cherry-pick main...refs/remotes/upstream-temp/main
+```
+4. Merge upstream manually instead of resetting:
+```bash
+git merge --no-ff refs/remotes/upstream-temp/main
+```
+5. Resolve conflicts by keeping local behavior where required, then push:
+```bash
+git push origin main
+```
+6. Remove the temporary ref:
+```bash
+git update-ref -d refs/remotes/upstream-temp/main
+```
+
+Rules for this fork:
+- Do not use `git reset --hard` to sync upstream.
+- Do not re-enable automatic sync workflows.
+- When upstream touches `README`, `config`, or arXiv retrieval logic, review the merge carefully because this fork intentionally diverges there.
+
+If you only want release notifications, subscribe to the upstream repo via `Watch`.
 
 ![Watch](./assets/subscribe_release.png)
 
