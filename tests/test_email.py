@@ -41,5 +41,6 @@ def test_render_email_escapes_abstract_with_braces(papers:list[Paper]):
     assert "{medical perception bottleneck}" in email_content
     assert "&lt;xml&gt;" in email_content
 
+@pytest.mark.ci
 def test_send_email(config,papers:list[Paper]):
     send_email(config, render_email(papers))
