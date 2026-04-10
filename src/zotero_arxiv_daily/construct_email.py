@@ -59,6 +59,32 @@ def _escape_text(value: str | None) -> str:
         return ""
     return html.escape(str(value), quote=True)
 
+
+def _format_relative_relevance_scores(papers: list[Paper]) -> list[str]:
+    valid_scores = [
+        (idx, float(p.score))
+        for idx, p in enumerate(papers)
+        if p.score is not None
+    ]
+    if not valid_scores:
+        return ["Unknown"] * len(papers)
+
+    if len(valid_scores) == 1:
+        only_idx, _ = valid_scores[0]
+        result = ["Unknown"] * len(papers)
+        result[only_idx] = "8.0/10"
+        return result
+
+    ranked = sorted(valid_scores, key=lambda item: item[1], reverse=True)
+    max_rank = len(ranked) - 1
+    display_scores: list[str] = ["Unknown"] * len(papers)
+    top_display = 9.5
+    bottom_display = 6.0
+    for rank, (idx, _) in enumerate(ranked):
+        relative_score = top_display - (top_display - bottom_display) * (rank / max_rank)
+        display_scores[idx] = f"{relative_score:.1f}/10"
+    return display_scores
+
 def get_block_html(
     title: str,
     authors: str,
@@ -108,7 +134,7 @@ def get_block_html(
     {author_row}
     <tr>
         <td style="font-size: 14px; color: #333; padding: 8px 0;">
-            <strong>Relevance:</strong> {rate}
+            <strong>Relative Relevance:</strong> {rate}
         </td>
     </tr>
     {tldr_row}
@@ -141,10 +167,11 @@ def render_email(papers:list[Paper], show_tldr: bool = True, show_affiliations: 
     parts = []
     if len(papers) == 0 :
         return framework.replace('__CONTENT__', get_empty_html())
-    
-    for p in papers:
+
+    display_scores = _format_relative_relevance_scores(papers)
+
+    for p, rate in zip(papers, display_scores):
         #rate = get_stars(p.score)
-        rate = round(p.score, 1) if p.score is not None else 'Unknown'
         author_list = [a for a in p.authors]
         num_authors = len(author_list)
         if num_authors <= 5:

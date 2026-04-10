@@ -1,6 +1,12 @@
-"""Tests for zotero_arxiv_daily.construct_email: render_email, get_stars, get_block_html."""
+"""Tests for zotero_arxiv_daily.construct_email: render_email, score formatting, get_stars, get_block_html."""
 
-from zotero_arxiv_daily.construct_email import render_email, get_stars, get_block_html, get_empty_html
+from zotero_arxiv_daily.construct_email import (
+    _format_relative_relevance_scores,
+    get_block_html,
+    get_empty_html,
+    get_stars,
+    render_email,
+)
 from tests.canned_responses import make_sample_paper
 
 
@@ -79,6 +85,27 @@ def test_render_email_uses_abstract_when_tldr_is_disabled():
     assert "Abstract:" in html
     assert "Test Abstract" in html
     assert "Test TLDR" not in html
+
+
+def test_relative_relevance_scores_are_rank_normalized():
+    papers = [
+        make_sample_paper(score=0.03),
+        make_sample_paper(score=0.11),
+        make_sample_paper(score=0.07),
+    ]
+    scores = _format_relative_relevance_scores(papers)
+    assert scores == ["6.0/10", "9.5/10", "7.8/10"]
+
+
+def test_render_email_uses_relative_relevance_label():
+    papers = [
+        make_sample_paper(title="Top", score=0.20),
+        make_sample_paper(title="Lower", score=0.05),
+    ]
+    html = render_email(papers)
+    assert "Relative Relevance:" in html
+    assert "9.5/10" in html
+    assert "6.0/10" in html
 
 
 def test_render_email_escapes_abstract_with_braces():
