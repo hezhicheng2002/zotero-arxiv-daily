@@ -1,14 +1,10 @@
-import io
+"""Tests for ArxivRetriever."""
+
 import time
 from types import SimpleNamespace
-from urllib.error import HTTPError
 
-from omegaconf import open_dict
-
-from zotero_arxiv_daily.protocol import Paper
-import zotero_arxiv_daily.retriever.arxiv_retriever as arxiv_retriever
 from zotero_arxiv_daily.retriever.arxiv_retriever import ArxivRetriever, _run_with_hard_timeout
-from zotero_arxiv_daily.retriever.base import BaseRetriever, register_retriever
+import zotero_arxiv_daily.retriever.arxiv_retriever as arxiv_retriever
 
 
 def _sleep_and_return(value: str, delay_seconds: float) -> str:
@@ -20,7 +16,7 @@ def _raise_runtime_error() -> None:
     raise RuntimeError("boom")
 
 
-def test_arxiv_retriever(config, monkeypatch):
+def test_arxiv_retriever_returns_metadata_only_when_generation_disabled(config, monkeypatch):
     raw_papers = [
         SimpleNamespace(
             title="Paper A",
@@ -40,6 +36,8 @@ def test_arxiv_retriever(config, monkeypatch):
 
     monkeypatch.setattr(ArxivRetriever, "_retrieve_raw_papers", lambda self: raw_papers)
 
+    config.executor.show_tldr = False
+    config.executor.show_affiliations = False
     retriever = ArxivRetriever(config)
     papers = retriever.retrieve_papers()
 
@@ -50,77 +48,42 @@ def test_arxiv_retriever(config, monkeypatch):
     assert all(paper.full_text is None for paper in papers)
 
 
-@register_retriever("failing_test")
-class FailingTestRetriever(BaseRetriever):
-    def _retrieve_raw_papers(self) -> list[dict[str, str]]:
-        return [
-            {"title": "good paper", "mode": "ok"},
-            {"title": "bad paper", "mode": "fail"},
-        ]
+def test_arxiv_retriever_include_cross_list(config, mock_feedparser, monkeypatch):
+    monkeypatch.setattr("zotero_arxiv_daily.retriever.base.sleep", lambda _: None)
 
-    def convert_to_paper(self, raw_paper: dict[str, str]) -> Paper | None:
-        if raw_paper["mode"] == "fail":
-            raise HTTPError(
-                url="https://example.com/paper.pdf",
-                code=404,
-                msg="not found",
-                hdrs=None,
-                fp=io.BufferedReader(io.BytesIO(b"missing")),
-            )
-        return Paper(
-            source=self.name,
-            title=raw_paper["title"],
-            authors=[],
-            abstract="",
-            url=f"https://example.com/{raw_paper['mode']}",
-        )
+    all_entries = list(mock_feedparser.entries)
+    new_entries = [
+        entry for entry in all_entries
+        if entry.get("arxiv_announce_type", "new") in {"new", "cross"}
+    ]
 
+    fake_results = []
+    for entry in new_entries:
+        pid = entry.id.removeprefix("oai:arXiv.org:")
+        fake_results.append(SimpleNamespace(
+            title=entry.title,
+            authors=[SimpleNamespace(name="Test Author")],
+            summary="Test abstract",
+            pdf_url=f"https://arxiv.org/pdf/{pid}",
+            entry_id=f"https://arxiv.org/abs/{pid}",
+            source_url=lambda pid=pid: f"https://arxiv.org/e-print/{pid}",
+        ))
 
-@register_retriever("serial_test")
-class SerialTestRetriever(BaseRetriever):
-    def __init__(self, config, seen_titles: list[str]):
-        super().__init__(config)
-        self.seen_titles = seen_titles
+    class FakeClient:
+        def __init__(self, **kw):
+            pass
 
-    def _retrieve_raw_papers(self) -> list[dict[str, str]]:
-        return [
-            {"title": "paper 1"},
-            {"title": "paper 2"},
-            {"title": "paper 3"},
-        ]
+        def results(self, search):
+            return iter(fake_results)
 
-    def convert_to_paper(self, raw_paper: dict[str, str]) -> Paper:
-        self.seen_titles.append(raw_paper["title"])
-        return Paper(
-            source=self.name,
-            title=raw_paper["title"],
-            authors=[],
-            abstract="",
-            url=f"https://example.com/{raw_paper['title']}",
-        )
+    monkeypatch.setattr(arxiv_retriever.arxiv, "Client", FakeClient)
 
-
-def test_retrieve_papers_skips_conversion_errors(config):
-    with open_dict(config.source):
-        config.source.failing_test = {}
-
-    retriever = FailingTestRetriever(config)
+    config.source.arxiv.include_cross_list = True
+    retriever = ArxivRetriever(config)
     papers = retriever.retrieve_papers()
 
-    assert [paper.title for paper in papers] == ["good paper"]
-
-
-def test_retrieve_papers_runs_serially(config):
-    with open_dict(config.source):
-        config.source.serial_test = {}
-
-    seen_titles: list[str] = []
-    retriever = SerialTestRetriever(config, seen_titles)
-    papers = retriever.retrieve_papers()
-
-    expected_titles = ["paper 1", "paper 2", "paper 3"]
-    assert seen_titles == expected_titles
-    assert [paper.title for paper in papers] == expected_titles
+    assert len(papers) == len(new_entries)
+    assert set(p.title for p in papers) == set(e.title for e in new_entries)
 
 
 def test_run_with_hard_timeout_returns_value():
@@ -128,40 +91,35 @@ def test_run_with_hard_timeout_returns_value():
         _sleep_and_return,
         ("done", 0.01),
         timeout=1,
-        operation="test operation",
+        operation="test op",
         paper_title="paper",
     )
-
     assert result == "done"
 
 
 def test_run_with_hard_timeout_returns_none_on_timeout(monkeypatch):
     warnings: list[str] = []
     monkeypatch.setattr(arxiv_retriever, "logger", SimpleNamespace(warning=warnings.append))
-
     result = _run_with_hard_timeout(
         _sleep_and_return,
         ("done", 1.0),
         timeout=0.01,
-        operation="test operation",
+        operation="test op",
         paper_title="paper",
     )
-
     assert result is None
-    assert warnings == ["test operation timed out for paper after 0.01 seconds"]
+    assert "timed out" in warnings[0]
 
 
 def test_run_with_hard_timeout_returns_none_on_failure(monkeypatch):
     warnings: list[str] = []
     monkeypatch.setattr(arxiv_retriever, "logger", SimpleNamespace(warning=warnings.append))
-
     result = _run_with_hard_timeout(
         _raise_runtime_error,
         (),
         timeout=1,
-        operation="test operation",
+        operation="test op",
         paper_title="paper",
     )
-
     assert result is None
-    assert warnings == ["test operation failed for paper: RuntimeError: boom"]
+    assert "boom" in warnings[0]

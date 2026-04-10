@@ -1,5 +1,6 @@
 from .base import BaseReranker, register_reranker
 import logging
+import sys
 import warnings
 import numpy as np
 from loguru import logger
@@ -21,7 +22,19 @@ class LocalReranker(BaseReranker):
             warnings.filterwarnings("ignore", category=FutureWarning)
 
         logger.info(f"Loading local reranker model: {self.config.reranker.local.model}")
-        encoder = SentenceTransformer(self.config.reranker.local.model, trust_remote_code=True)
+        try:
+            encoder = SentenceTransformer(self.config.reranker.local.model, trust_remote_code=True)
+        except TypeError as exc:
+            if "multiple values for keyword argument 'trust_remote_code'" not in str(exc):
+                raise
+            logger.warning(
+                "Retrying local reranker model load without SentenceTransformer-level trust_remote_code "
+                "because the current transformers/sentence-transformers combination passes it twice."
+            )
+            sentence_transformers_module = sys.modules.get("sentence_transformers")
+            if sentence_transformers_module is not None:
+                setattr(sentence_transformers_module, "SentenceTransformer", SentenceTransformer)
+            encoder = SentenceTransformer(self.config.reranker.local.model)
         if self.config.reranker.local.encode_kwargs:
             encode_kwargs = self.config.reranker.local.encode_kwargs
         else:
