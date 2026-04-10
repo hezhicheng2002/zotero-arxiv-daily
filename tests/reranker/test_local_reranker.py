@@ -52,6 +52,31 @@ def test_local_reranker_falls_back_when_primary_remote_code_breaks(config, monke
     ]
 
 
+def test_local_reranker_falls_back_to_lexical_similarity_when_hf_is_unavailable(config, monkeypatch):
+    config.executor.debug = True
+    config.reranker.local.model = "primary-model"
+    config.reranker.local.fallback_model = "fallback-model"
+
+    class FakeSentenceTransformer:
+        def __init__(self, model_name, **kwargs):
+            raise OSError("We couldn't connect to 'https://huggingface.co' to load the files.")
+
+    monkeypatch.setitem(
+        sys.modules,
+        "sentence_transformers",
+        SimpleNamespace(SentenceTransformer=FakeSentenceTransformer),
+    )
+
+    reranker = LocalReranker(config)
+    score = reranker.get_similarity_score(
+        ["graph neural networks for molecules"],
+        ["graph representation learning for chemistry"],
+    )
+
+    assert score.shape == (1, 1)
+    assert score[0, 0] > 0
+
+
 @pytest.mark.slow
 def test_local_reranker(config):
     reranker = LocalReranker(config)

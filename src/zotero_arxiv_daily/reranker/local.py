@@ -3,6 +3,7 @@ import warnings
 
 import numpy as np
 from loguru import logger
+from sklearn.feature_extraction.text import TfidfVectorizer
 
 from .base import BaseReranker, register_reranker
 
@@ -13,11 +14,42 @@ SAFE_FALLBACK_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 @register_reranker("local")
 class LocalReranker(BaseReranker):
     def _is_remote_code_load_error(self, exc: Exception) -> bool:
-        message = str(exc)
-        return (
-            "multiple values for keyword argument 'trust_remote_code'" in message
-            or "No module named 'custom_st'" in message
+        message = f"{type(exc).__name__}: {exc}"
+        return any(
+            marker in message
+            for marker in [
+                "multiple values for keyword argument 'trust_remote_code'",
+                "No module named 'custom_st'",
+            ]
         )
+
+    def _is_huggingface_availability_error(self, exc: Exception) -> bool:
+        message = f"{type(exc).__name__}: {exc}"
+        return any(
+            marker in message
+            for marker in [
+                "503 Service Unavailable",
+                "couldn't connect to 'https://huggingface.co'",
+                "LocalEntryNotFoundError",
+                "ReadTimeout",
+                "ConnectError",
+            ]
+        )
+
+    def _lexical_similarity_score(self, s1: list[str], s2: list[str]) -> np.ndarray:
+        texts = [(text or "").strip() for text in [*s1, *s2]]
+        if not any(texts):
+            return np.zeros((len(s1), len(s2)))
+
+        vectorizer = TfidfVectorizer(stop_words="english")
+        try:
+            features = vectorizer.fit_transform(texts)
+        except ValueError:
+            return np.zeros((len(s1), len(s2)))
+
+        left = features[: len(s1)]
+        right = features[len(s1):]
+        return (left @ right.T).toarray()
 
     def _load_encoder(self):
         from sentence_transformers import SentenceTransformer
@@ -51,7 +83,18 @@ class LocalReranker(BaseReranker):
             logging.getLogger("huggingface_hub.utils._http").setLevel(logging.ERROR)
             warnings.filterwarnings("ignore", category=FutureWarning)
 
-        encoder = self._load_encoder()
+        try:
+            encoder = self._load_encoder()
+        except Exception as exc:
+            if not (
+                self._is_remote_code_load_error(exc)
+                or self._is_huggingface_availability_error(exc)
+            ):
+                raise
+            logger.warning(
+                f"Embedding reranker unavailable ({exc}). Falling back to local TF-IDF lexical similarity."
+            )
+            return self._lexical_similarity_score(s1, s2)
         if self.config.reranker.local.encode_kwargs:
             encode_kwargs = self.config.reranker.local.encode_kwargs
         else:
