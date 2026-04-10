@@ -40,6 +40,7 @@ llm:
 reranker:
   local:
     model: jinaai/jina-embeddings-v5-text-nano # The Hugging Face model name of the local embedding model. Example: jinaai/jina-embeddings-v5-text-nano
+    fallback_model: sentence-transformers/all-MiniLM-L6-v2 # Safe fallback when the primary model's remote code breaks on newer dependency combos.
     encode_kwargs:
     # The kwargs for the encode method of the local embedding model. Details see [here](https://www.sbert.net/docs/package_reference/SentenceTransformer.html#sentence_transformers.SentenceTransformer.encode)
       task: retrieval

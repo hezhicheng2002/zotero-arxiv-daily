@@ -1,4 +1,4 @@
-"""Tests for LocalReranker; one fast compatibility test and one slow real-model test."""
+"""Tests for LocalReranker; one fast fallback test and one slow real-model test."""
 
 import sys
 from types import SimpleNamespace
@@ -9,9 +9,11 @@ import pytest
 from zotero_arxiv_daily.reranker.local import LocalReranker
 
 
-def test_local_reranker_retries_without_trust_remote_code(config, monkeypatch):
+def test_local_reranker_falls_back_when_primary_remote_code_breaks(config, monkeypatch):
     config.executor.debug = True
-    init_kwargs: list[dict] = []
+    config.reranker.local.model = "primary-model"
+    config.reranker.local.fallback_model = "fallback-model"
+    init_calls: list[tuple[str, dict]] = []
 
     class FakeSimilarity:
         def __init__(self, values):
@@ -22,8 +24,8 @@ def test_local_reranker_retries_without_trust_remote_code(config, monkeypatch):
 
     class FakeSentenceTransformer:
         def __init__(self, model_name, **kwargs):
-            init_kwargs.append(dict(kwargs))
-            if kwargs.get("trust_remote_code"):
+            init_calls.append((model_name, dict(kwargs)))
+            if model_name == "primary-model":
                 raise TypeError(
                     "AutoTokenizer.from_pretrained() got multiple values for keyword argument 'trust_remote_code'"
                 )
@@ -44,7 +46,10 @@ def test_local_reranker_retries_without_trust_remote_code(config, monkeypatch):
     score = reranker.get_similarity_score(["hello", "world"], ["ping"])
 
     assert score.shape == (2, 1)
-    assert init_kwargs == [{"trust_remote_code": True}, {}]
+    assert init_calls == [
+        ("primary-model", {"trust_remote_code": True}),
+        ("fallback-model", {}),
+    ]
 
 
 @pytest.mark.slow

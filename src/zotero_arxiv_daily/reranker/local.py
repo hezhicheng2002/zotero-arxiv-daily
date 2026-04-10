@@ -1,13 +1,43 @@
-from .base import BaseReranker, register_reranker
 import logging
-import sys
 import warnings
+
 import numpy as np
 from loguru import logger
+
+from .base import BaseReranker, register_reranker
+
+
+SAFE_FALLBACK_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+
+
 @register_reranker("local")
 class LocalReranker(BaseReranker):
-    def get_similarity_score(self, s1: list[str], s2: list[str]) -> np.ndarray:
+    def _is_remote_code_load_error(self, exc: Exception) -> bool:
+        message = str(exc)
+        return (
+            "multiple values for keyword argument 'trust_remote_code'" in message
+            or "No module named 'custom_st'" in message
+        )
+
+    def _load_encoder(self):
         from sentence_transformers import SentenceTransformer
+
+        primary_model = self.config.reranker.local.model
+        fallback_model = self.config.reranker.local.get("fallback_model", SAFE_FALLBACK_MODEL)
+
+        logger.info(f"Loading local reranker model: {primary_model}")
+        try:
+            return SentenceTransformer(primary_model, trust_remote_code=True)
+        except Exception as exc:
+            if not self._is_remote_code_load_error(exc) or not fallback_model:
+                raise
+            logger.warning(
+                f"Primary reranker model '{primary_model}' failed to load due to remote-code incompatibility: {exc}. "
+                f"Falling back to '{fallback_model}'."
+            )
+            return SentenceTransformer(fallback_model)
+
+    def get_similarity_score(self, s1: list[str], s2: list[str]) -> np.ndarray:
         if not self.config.executor.debug:
             from transformers.utils import logging as transformers_logging
             from huggingface_hub.utils import logging as hf_logging
@@ -21,20 +51,7 @@ class LocalReranker(BaseReranker):
             logging.getLogger("huggingface_hub.utils._http").setLevel(logging.ERROR)
             warnings.filterwarnings("ignore", category=FutureWarning)
 
-        logger.info(f"Loading local reranker model: {self.config.reranker.local.model}")
-        try:
-            encoder = SentenceTransformer(self.config.reranker.local.model, trust_remote_code=True)
-        except TypeError as exc:
-            if "multiple values for keyword argument 'trust_remote_code'" not in str(exc):
-                raise
-            logger.warning(
-                "Retrying local reranker model load without SentenceTransformer-level trust_remote_code "
-                "because the current transformers/sentence-transformers combination passes it twice."
-            )
-            sentence_transformers_module = sys.modules.get("sentence_transformers")
-            if sentence_transformers_module is not None:
-                setattr(sentence_transformers_module, "SentenceTransformer", SentenceTransformer)
-            encoder = SentenceTransformer(self.config.reranker.local.model)
+        encoder = self._load_encoder()
         if self.config.reranker.local.encode_kwargs:
             encode_kwargs = self.config.reranker.local.encode_kwargs
         else:
